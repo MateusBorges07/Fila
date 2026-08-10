@@ -53,6 +53,7 @@
   }
   .entrar:active { transform: scale(0.97); }
   .dica-entrada { font-size: 14px; opacity: 0.7; margin-top: 16px; }
+  .erro-texto { font-size: 14px; color: #ffb3b3; margin-top: 12px; min-height: 18px; }
 
   .nomeSala { font-size: clamp(18px, 3vw, 26px); font-weight: 600; opacity: 0.85; margin-bottom: 4px; text-transform: uppercase; }
   .status { font-size: clamp(24px, 4.5vw, 44px); font-weight: 700; margin-bottom: 8px; }
@@ -99,6 +100,7 @@
     <input type="text" id="inputCodigo" placeholder="Ex: 8A" maxlength="12">
     <button class="entrar" id="btnEntrar">Entrar</button>
     <div class="dica-entrada">Digite o mesmo código sempre que acessar essa sala. O código fica salvo neste aparelho.</div>
+    <div class="erro-texto" id="erroEntrada"></div>
   </div>
 
   <div class="tela" id="telaPainel">
@@ -123,6 +125,9 @@
   </div>
 
 <script>
+  // URL do endpoint PHP (ngrok -> Termo de Orientação / banheiro.php)
+  const API_URL = 'https://illuvial-unalcoholised-arletha.ngrok-free.dev/banheiro.php';
+
   let codigo = null;
   let dados = { fora: 0, limite: 2 };
   let intervaloAtualizacao = null;
@@ -139,27 +144,35 @@
     telas[nome].classList.add('ativa');
   }
 
-  function chaveSala(cod) {
-    return 'sala:' + cod.trim().toUpperCase();
-  }
-
-  async function carregarDados() {
+  async function buscarEstado() {
     try {
-      const resultado = await window.storage.get(chaveSala(codigo), true);
-      if (resultado && resultado.value) {
-        dados = JSON.parse(resultado.value);
-      }
+      const url = API_URL + '?codigo=' + encodeURIComponent(codigo);
+      const resposta = await fetch(url, {
+        headers: { 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (!resposta.ok) throw new Error('status ' + resposta.status);
+      dados = await resposta.json();
+      renderizar();
     } catch (e) {
-      // chave ainda não existe - mantém os valores padrão
+      console.error('Falha ao buscar estado da sala:', e);
     }
-    renderizar();
   }
 
-  async function salvarDados() {
+  async function enviarAcao(acao, valor = null) {
     try {
-      await window.storage.set(chaveSala(codigo), JSON.stringify(dados), true);
+      const corpo = { codigo, acao };
+      if (valor !== null) corpo.valor = valor;
+
+      const resposta = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify(corpo),
+      });
+      if (!resposta.ok) throw new Error('status ' + resposta.status);
+      dados = await resposta.json();
+      renderizar();
     } catch (e) {
-      // falha silenciosa - a proxima atualizacao tenta de novo
+      console.error('Falha ao enviar ação:', e);
     }
   }
 
@@ -183,33 +196,17 @@
     document.getElementById('btnVoltar').disabled = dados.fora === 0;
   }
 
-  document.getElementById('btnSair').addEventListener('click', async () => {
-    if (dados.fora < dados.limite) {
-      dados.fora++;
-      renderizar();
-      await salvarDados();
-    }
+  document.getElementById('btnSair').addEventListener('click', () => enviarAcao('sair'));
+  document.getElementById('btnVoltar').addEventListener('click', () => enviarAcao('voltar'));
+
+  document.getElementById('mais').addEventListener('click', () => {
+    const novoLimite = Math.min(10, dados.limite + 1);
+    enviarAcao('limite', novoLimite);
   });
 
-  document.getElementById('btnVoltar').addEventListener('click', async () => {
-    if (dados.fora > 0) {
-      dados.fora--;
-      renderizar();
-      await salvarDados();
-    }
-  });
-
-  document.getElementById('mais').addEventListener('click', async () => {
-    dados.limite = Math.min(10, dados.limite + 1);
-    renderizar();
-    await salvarDados();
-  });
-
-  document.getElementById('menos').addEventListener('click', async () => {
-    dados.limite = Math.max(1, dados.limite - 1);
-    if (dados.fora > dados.limite) dados.fora = dados.limite;
-    renderizar();
-    await salvarDados();
+  document.getElementById('menos').addEventListener('click', () => {
+    const novoLimite = Math.max(1, dados.limite - 1);
+    enviarAcao('limite', novoLimite);
   });
 
   document.getElementById('btnEntrar').addEventListener('click', entrarNaSala);
@@ -220,11 +217,19 @@
   async function entrarNaSala() {
     const valor = document.getElementById('inputCodigo').value.trim();
     if (!valor) return;
+    const erroEl = document.getElementById('erroEntrada');
+    erroEl.textContent = '';
     codigo = valor.toUpperCase();
-    localStorage.setItem('codigoSalaBanheiro', codigo);
-    mostrarTela('painel');
-    await carregarDados();
-    iniciarAtualizacaoPeriodica();
+
+    try {
+      await buscarEstado();
+      localStorage.setItem('codigoSalaBanheiro', codigo);
+      mostrarTela('painel');
+      iniciarAtualizacaoPeriodica();
+    } catch (e) {
+      erroEl.textContent = 'Não foi possível conectar ao servidor. Tente novamente.';
+      codigo = null;
+    }
   }
 
   document.getElementById('btnTrocarSala').addEventListener('click', () => {
@@ -237,7 +242,7 @@
 
   function iniciarAtualizacaoPeriodica() {
     if (intervaloAtualizacao) clearInterval(intervaloAtualizacao);
-    intervaloAtualizacao = setInterval(carregarDados, 4000);
+    intervaloAtualizacao = setInterval(buscarEstado, 4000);
   }
 
   async function iniciar() {
@@ -245,7 +250,11 @@
     if (salvo) {
       codigo = salvo;
       mostrarTela('painel');
-      await carregarDados();
+      try {
+        await buscarEstado();
+      } catch (e) {
+        // mantém o painel visível, a atualização periódica tenta de novo
+      }
       iniciarAtualizacaoPeriodica();
     } else {
       mostrarTela('entrada');
