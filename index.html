@@ -242,7 +242,7 @@
 
   function iniciarAtualizacaoPeriodica() {
     if (intervaloAtualizacao) clearInterval(intervaloAtualizacao);
-    intervaloAtualizacao = setInterval(buscarEstado, 4000);
+    intervaloAtualizacao = setInterval(buscarEstado, 1000);
   }
 
   async function iniciar() {
