@@ -83,13 +83,31 @@
     background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center;
     font-size: 18px; font-weight: 700;
   }
-  .trocarSala { margin-top: 20px; background: none; border: none; color: rgba(255,255,255,0.6); font-size: 13px; cursor: pointer; text-decoration: underline; }
+  .linhaBotoesExtra { display: flex; gap: 16px; margin-top: 20px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .trocarSala, .botaoReset {
+    background: none; border: none; color: rgba(255,255,255,0.6); font-size: 13px; cursor: pointer; text-decoration: underline;
+  }
   .carregando-texto { font-size: 16px; opacity: 0.6; }
+
+  .avisoOffline {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: #4a1010;
+    color: #ffdcdc;
+    text-align: center;
+    font-size: 13px;
+    padding: 8px;
+    display: none;
+    z-index: 10;
+  }
+  .avisoOffline.ativo { display: block; }
 </style>
 </head>
 <body class="carregando">
 
   <h2 style="position:absolute;width:1px;height:1px;overflow:hidden;">Painel online para controlar quantas vagas de banheiro estão em uso por sala, com dados compartilhados entre dispositivos</h2>
+
+  <div class="avisoOffline" id="avisoOffline">Sem conexão com o servidor. Tentando reconectar...</div>
 
   <div class="tela" id="telaCarregando">
     <div class="carregando-texto">Carregando...</div>
@@ -121,7 +139,10 @@
       <button class="mini" id="mais">+</button>
     </div>
 
-    <button class="trocarSala" id="btnTrocarSala">Trocar de sala</button>
+    <div class="linhaBotoesExtra">
+      <button class="botaoReset" id="btnResetar">Resetar sala</button>
+      <button class="trocarSala" id="btnTrocarSala">Trocar de sala</button>
+    </div>
   </div>
 
 <script>
@@ -131,6 +152,7 @@
   let codigo = null;
   let dados = { fora: 0, limite: 2 };
   let intervaloAtualizacao = null;
+  let falhasSeguidas = 0;
 
   const body = document.body;
   const telas = {
@@ -138,6 +160,7 @@
     entrada: document.getElementById('telaEntrada'),
     painel: document.getElementById('telaPainel'),
   };
+  const avisoOffline = document.getElementById('avisoOffline');
 
   function mostrarTela(nome) {
     Object.values(telas).forEach(t => t.classList.remove('ativa'));
@@ -156,6 +179,18 @@
       .trim();
   }
 
+  function marcarConexaoOk() {
+    falhasSeguidas = 0;
+    avisoOffline.classList.remove('ativo');
+  }
+
+  function marcarConexaoFalhou() {
+    falhasSeguidas++;
+    if (falhasSeguidas >= 2) {
+      avisoOffline.classList.add('ativo');
+    }
+  }
+
   async function buscarEstado() {
     try {
       const url = API_URL + '?codigo=' + encodeURIComponent(codigo);
@@ -164,28 +199,42 @@
       });
       if (!resposta.ok) throw new Error('status ' + resposta.status);
       dados = await resposta.json();
+      marcarConexaoOk();
       renderizar();
     } catch (e) {
       console.error('Falha ao buscar estado da sala:', e);
+      marcarConexaoFalhou();
+      throw e;
     }
   }
 
-  async function enviarAcao(acao, valor = null) {
+  async function enviarAcao(acao, extras = {}) {
     try {
-      const corpo = { codigo, acao };
-      if (valor !== null) corpo.valor = valor;
+      const corpo = { codigo, acao, ...extras };
 
       const resposta = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
         body: JSON.stringify(corpo),
       });
+
+      if (resposta.status === 403) {
+        alert('Senha incorreta.');
+        return;
+      }
       if (!resposta.ok) throw new Error('status ' + resposta.status);
+
       dados = await resposta.json();
+      marcarConexaoOk();
       renderizar();
     } catch (e) {
       console.error('Falha ao enviar ação:', e);
+      marcarConexaoFalhou();
     }
+  }
+
+  function pedirSenhaAdmin() {
+    return window.prompt('Senha de administrador:');
   }
 
   function renderizar() {
@@ -212,13 +261,24 @@
   document.getElementById('btnVoltar').addEventListener('click', () => enviarAcao('voltar'));
 
   document.getElementById('mais').addEventListener('click', () => {
+    const senhaAdmin = pedirSenhaAdmin();
+    if (senhaAdmin === null) return;
     const novoLimite = Math.min(10, dados.limite + 1);
-    enviarAcao('limite', novoLimite);
+    enviarAcao('limite', { valor: novoLimite, senha: senhaAdmin });
   });
 
   document.getElementById('menos').addEventListener('click', () => {
+    const senhaAdmin = pedirSenhaAdmin();
+    if (senhaAdmin === null) return;
     const novoLimite = Math.max(1, dados.limite - 1);
-    enviarAcao('limite', novoLimite);
+    enviarAcao('limite', { valor: novoLimite, senha: senhaAdmin });
+  });
+
+  document.getElementById('btnResetar').addEventListener('click', () => {
+    if (!confirm('Zerar a contagem de alunos fora da sala ' + codigo + '?')) return;
+    const senhaAdmin = pedirSenhaAdmin();
+    if (senhaAdmin === null) return;
+    enviarAcao('resetar', { senha: senhaAdmin });
   });
 
   document.getElementById('btnEntrar').addEventListener('click', entrarNaSala);
@@ -254,7 +314,7 @@
 
   function iniciarAtualizacaoPeriodica() {
     if (intervaloAtualizacao) clearInterval(intervaloAtualizacao);
-    intervaloAtualizacao = setInterval(buscarEstado, 1000);
+    intervaloAtualizacao = setInterval(() => buscarEstado().catch(() => {}), 1000);
   }
 
   async function iniciar() {
