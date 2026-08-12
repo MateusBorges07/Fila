@@ -84,9 +84,10 @@
     font-size: 18px; font-weight: 700;
   }
   .linhaBotoesExtra { display: flex; gap: 16px; margin-top: 20px; align-items: center; flex-wrap: wrap; justify-content: center; }
-  .trocarSala, .botaoReset {
+  .trocarSala, .botaoReset, .linkAdmin {
     background: none; border: none; color: rgba(255,255,255,0.6); font-size: 13px; cursor: pointer; text-decoration: underline;
   }
+  a.linkAdmin { display: inline-block; margin-top: 16px; }
   .carregando-texto { font-size: 16px; opacity: 0.6; }
 
   .avisoOffline {
@@ -119,6 +120,7 @@
     <button class="entrar" id="btnEntrar">Entrar</button>
     <div class="dica-entrada">Digite o mesmo código sempre que acessar essa sala. O código fica salvo neste aparelho.<br>Ex: "2ªA", "2ºA" e "2A" são tratados como a mesma sala.</div>
     <div class="erro-texto" id="erroEntrada"></div>
+    <a href="admin.html" class="linkAdmin">Portal do administrador</a>
   </div>
 
   <div class="tela" id="telaPainel">
@@ -142,6 +144,7 @@
     <div class="linhaBotoesExtra">
       <button class="botaoReset" id="btnResetar">Resetar sala</button>
       <button class="trocarSala" id="btnTrocarSala">Trocar de sala</button>
+      <a href="admin.html" class="linkAdmin">Portal do administrador</a>
     </div>
   </div>
 
