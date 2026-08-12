@@ -99,7 +99,7 @@
     <div class="titulo">Entrar na sala</div>
     <input type="text" id="inputCodigo" placeholder="Ex: 8A" maxlength="12">
     <button class="entrar" id="btnEntrar">Entrar</button>
-    <div class="dica-entrada">Digite o mesmo código sempre que acessar essa sala. O código fica salvo neste aparelho.</div>
+    <div class="dica-entrada">Digite o mesmo código sempre que acessar essa sala. O código fica salvo neste aparelho.<br>Ex: "2ªA", "2ºA" e "2A" são tratados como a mesma sala.</div>
     <div class="erro-texto" id="erroEntrada"></div>
   </div>
 
@@ -142,6 +142,18 @@
   function mostrarTela(nome) {
     Object.values(telas).forEach(t => t.classList.remove('ativa'));
     telas[nome].classList.add('ativa');
+  }
+
+  /**
+   * Normaliza o código da sala: maiúsculas, sem º/ª/°, sem espaços e sem pontos.
+   * Ex: "2ªA", "2ºA", "2 A", "2.a" -> "2A"
+   * Cobre do 6º ano do Fundamental (6,7,8,9) ao 3º ano do Médio (1,2,3).
+   */
+  function normalizarCodigo(valor) {
+    return valor
+      .toUpperCase()
+      .replace(/[ºª°.\s]/g, '')
+      .trim();
   }
 
   async function buscarEstado() {
@@ -219,7 +231,7 @@
     if (!valor) return;
     const erroEl = document.getElementById('erroEntrada');
     erroEl.textContent = '';
-    codigo = valor.toUpperCase();
+    codigo = normalizarCodigo(valor);
 
     try {
       await buscarEstado();
@@ -248,7 +260,7 @@
   async function iniciar() {
     const salvo = localStorage.getItem('codigoSalaBanheiro');
     if (salvo) {
-      codigo = salvo;
+      codigo = normalizarCodigo(salvo);
       mostrarTela('painel');
       try {
         await buscarEstado();
