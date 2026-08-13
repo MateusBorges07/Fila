@@ -47,6 +47,22 @@
   .cardSala .valores { font-size: 28px; font-weight: 800; }
   .cardSala .rotulo { font-size: 12px; opacity: 0.6; margin-top: 4px; }
 
+  /* Botão de apagar turma, dentro de cada card */
+  .cardSala .botaoApagar {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    background: #b33636;
+    border: none;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .cardSala .botaoApagar:hover { background: #8f2a2a; }
+
   .semSalas { opacity: 0.6; font-size: 14px; margin-top: 20px; }
   .rodapeAtualizacao { text-align: center; font-size: 12px; opacity: 0.5; margin-top: 24px; }
   .botaoAtualizar {
@@ -137,12 +153,37 @@
           <div class="codigo">${s.codigo}</div>
           <div class="valores">${s.fora} / ${s.limite}</div>
           <div class="rotulo">fora agora</div>
+          <button class="botaoApagar" onclick="apagarSala('${s.codigo}')">Apagar turma</button>
         </div>
       `).join('');
     }
 
     document.getElementById('ultimaAtualizacao').textContent =
       'Última atualização: ' + new Date().toLocaleTimeString('pt-BR');
+  }
+
+  async function apagarSala(codigo) {
+    const confirmar = confirm(`Apagar a turma "${codigo}"? Essa ação não pode ser desfeita.`);
+    if (!confirmar) return;
+
+    try {
+      const resposta = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo: codigo, acao: 'apagar', senha: senha })
+      });
+
+      if (resposta.status === 403) {
+        alert('Senha de administrador inválida.');
+        return;
+      }
+      if (!resposta.ok) throw new Error('status ' + resposta.status);
+
+      await carregarSalas(); // atualiza a lista sem a turma apagada
+    } catch (e) {
+      console.error('Falha ao apagar sala:', e);
+      alert('Não foi possível apagar a turma.');
+    }
   }
 </script>
 
